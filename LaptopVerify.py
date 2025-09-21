@@ -19,9 +19,6 @@ def ram():
 print("RAM: "+str(ram()) + " GB")
 
 
-
-
-
 def get_ram_details():
     try:
         c = wmi.WMI()
@@ -69,3 +66,4 @@ def diskdetails():
 
 
 print("Storage: "+str(diskdetails())+" GB")
+print("git test")
