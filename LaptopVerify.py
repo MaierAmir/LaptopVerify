@@ -104,7 +104,6 @@ def BatteryHealth():
     # design_capacity = info.get("DESIGN CAPACITY", "Unknown")
     # full_capacity = info.get("FULL CHARGE CAPACITY", "Unknown")
     # cycle_count = info.get("CYCLE COUNT", "Unknown")
-    #
     # # print("Design Capacity: "+str(design_capacity))
     # # print("Full Capacity: "+str(full_capacity))
     # # print("Cycle Count: "+str(cycle_count))
