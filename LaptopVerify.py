@@ -5,11 +5,41 @@ import datetime
 import wmi
 from bs4 import BeautifulSoup
 
+def cpu():
+    c=wmi.WMI()
 
-print(platform.processor())
+    for cpu in c.Win32_Processor():
+        return [cpu.Name, cpu.NumberOfCores, cpu.NumberOfLogicalProcessors, cpu.MaxClockSpeed, cpu.Manufacturer]
+
+print(cpu())
 
 os = platform.platform()
 print("OS Version: " + os) #windows version
+
+
+def pc():
+    c = wmi.WMI()
+    info = {}
+
+    for i in c.Win32_ComputerSystem():
+        info['Manufacturer'] = i.Manufacturer
+        info['Model'] = i.Model
+
+
+    for j in c.Win32_BIOS():
+        info['BIOSSerialNumber'] = j.SerialNumber
+        info['BIOSVersion'] = j.SMBIOSBIOSVersion
+        info['BIOSManufacturer'] = j.Manufacturer
+
+        # System Product (product id / sku)
+    for k in c.Win32_ComputerSystemProduct():
+        info['ProductVersion'] = k.Version
+        info['ProductUUID'] = k.UUID
+        info['ProductName'] = k.Name
+
+    return info
+
+print(pc())
 
 def ram():
 
@@ -50,6 +80,8 @@ def diskDetails():
 
     typDiskSizes = [32,64,128,256,512,1000,2000]
     details = []
+    c = wmi.WMI()
+    disks=[]
 
 
     du = psutil.disk_usage('/')
@@ -61,14 +93,22 @@ def diskDetails():
     details.append(round(du.free / 1000000000))
     details.append(round(du.percent))
 
+    for d in c.Win32_DiskDrive():
+        disk = {
+            "DeviceID": d.DeviceID,
+            "Model": d.Model,
+            "InterfaceType": d.InterfaceType,
+            "MediaType": getattr(d, "MediaType", None),
+            "Size": approxSize
+        }
+        disks.append(disk)
+
+    return disks
 
 
-    return details
-
-
-diskDetTitles = ["Total","Used","Free","Percent"]
-disk =  dict(zip(diskDetTitles,diskDetails()))
-print("Storage: "+str(disk))
+#diskDetTitles = ["Total","Used","Free","Percent"]
+#disk =  dict(zip(diskDetTitles,diskDetails()))
+print("Storage: "+str(diskDetails()))
 
 
 def BatteryHealth():
@@ -110,11 +150,5 @@ def BatteryHealth():
 
     return info
 
-
-
-
-
-
-
-
 print(BatteryHealth())
+
