@@ -3,6 +3,7 @@ import subprocess
 import wmi
 from bs4 import BeautifulSoup
 import json
+import requests
 
 def cpu():
     c=wmi.WMI()
@@ -155,7 +156,7 @@ print(pcinfo)
 
 ###############################################################
 
-import requests
+
 
 def send_pcinfo(pcinfo):
     url = "https://laptopverifybackend.onrender.com/authenticityCheck"
