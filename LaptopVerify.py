@@ -1,9 +1,8 @@
 import platform
-import psutil
 import subprocess
-import datetime
 import wmi
 from bs4 import BeautifulSoup
+import json
 
 def cpu():
     c=wmi.WMI()
@@ -37,17 +36,12 @@ def pc():
         info['ProductUUID'] = k.UUID
         info['ProductName'] = k.Name
 
+    for system in c.Win32_BIOS():
+        info['SN']=system.SerialNumber
+
     return info
 
 print(pc())
-
-def ram():
-
-    ram_bytes = psutil.virtual_memory().total
-    return round(ram_bytes / (1024**3))
-
-
-print("RAM: "+str(ram()) + " GB")
 
 
 def getRamDetails():
@@ -74,42 +68,14 @@ for i in RamDetails:
 
 
 
+def ram():
+    total = 0
+    for i in getRamDetails():
+        total +=  i['capacity (GB)']
 
+    return total
 
-def diskDetails():
-
-    typDiskSizes = [32,64,128,256,512,1000,2000]
-    details = []
-    c = wmi.WMI()
-    disks=[]
-
-
-    du = psutil.disk_usage('/')
-
-    diskSize = round(du.total / 1000000000)
-    approxSize  = min(typDiskSizes, key=lambda x: abs(x - diskSize))
-    details.append(approxSize)
-    details.append(round(du.used / 1000000000))
-    details.append(round(du.free / 1000000000))
-    details.append(round(du.percent))
-
-    for d in c.Win32_DiskDrive():
-        disk = {
-            "DeviceID": d.DeviceID,
-            "Model": d.Model,
-            "InterfaceType": d.InterfaceType,
-            "MediaType": getattr(d, "MediaType", None),
-            "Size": approxSize
-        }
-        disks.append(disk)
-
-    return disks
-
-
-#diskDetTitles = ["Total","Used","Free","Percent"]
-#disk =  dict(zip(diskDetTitles,diskDetails()))
-print("Storage: "+str(diskDetails()))
-
+print("Total RAM (GB):"+str(ram()))
 
 def BatteryHealth():
 
@@ -131,24 +97,77 @@ def BatteryHealth():
         print("Battery table not found.")
         return None
 
-    # Extract rows
+
     info = {}
     rows = battery_table.find_all("tr")
     for row in rows:
         cols = [col.get_text(strip=True) for col in row.find_all(["td", "th"])]
-        if len(cols) == 2:  # key-value pairs
+        if len(cols) == 2:
             key, value = cols
             info[key] = value
 
 
-    # design_capacity = info.get("DESIGN CAPACITY", "Unknown")
-    # full_capacity = info.get("FULL CHARGE CAPACITY", "Unknown")
-    # cycle_count = info.get("CYCLE COUNT", "Unknown")
-    # # print("Design Capacity: "+str(design_capacity))
-    # # print("Full Capacity: "+str(full_capacity))
-    # # print("Cycle Count: "+str(cycle_count))
-
     return info
 
 print(BatteryHealth())
+
+
+
+def diskDetails():
+    cmd = [
+        "powershell",
+        "-Command",
+        "Get-PhysicalDisk | Select FriendlyName,MediaType,BusType,Size | ConvertTo-Json -Compress"
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0 or not result.stdout.strip():
+        raise RuntimeError("PowerShell command failed: " + result.stderr)
+
+    try:
+        disks = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError("Failed to parse JSON: " + result.stdout)
+
+
+    if isinstance(disks, dict):
+        disks = [disks]
+
+    for d in disks:
+        if "Size" in d and d["Size"] is not None:
+            d["SizeGB"] = round(int(d["Size"]) / (1000**3))
+
+    return disks
+
+
+for d in diskDetails():
+    print(f"Name: {d['FriendlyName']}\nMedia: {d['MediaType']}\nBus: {d['BusType']}\n{d['SizeGB']} GB")
+
+
+
+pcinfo = str(BatteryHealth()) + str(diskDetails()) + str(getRamDetails()) + str(ram()) + str(pc()) + str(cpu())
+print(pcinfo)
+
+###############################################################
+
+#Render backend:
+#Authenticity Scan (powered by gemini AI)
+
+###############################################################
+
+import requests
+
+def send_pcinfo(pcinfo):
+    url = "https://laptopverifybackend.onrender.com/authenticityCheck"
+    try:
+        response = requests.post(url, json={"pcinfo": pcinfo})
+        response.raise_for_status()
+        return response.json().get("result")
+    except Exception as e:
+        return f"Error contacting backend: {e}"
+
+print(send_pcinfo(pcinfo))
+
+#TODO
+#GPU
 
