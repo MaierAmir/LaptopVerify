@@ -1,9 +1,15 @@
 import platform
 import subprocess
 import wmi
+from PySide6.QtGui import QFont, QColor
 from bs4 import BeautifulSoup
 import json
 import requests
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QTextEdit, QVBoxLayout, QFileDialog, QGridLayout, \
+    QLabel, QGraphicsDropShadowEffect, QFrame
+
+hasBattery = True
 
 def cpu():
     c=wmi.WMI()
@@ -16,8 +22,18 @@ print(cpu())
 os = platform.platform()
 print("OS Version: " + os) #windows version
 
+def gpu():
+    c=wmi.WMI()
+    gpus = []
+
+    for gpu in c.Win32_VideoController():
+        gpus.append({"gpu": gpu.name})
+
+    return gpus
+print(gpu())
 
 def pc():
+    global hasBattery
     c = wmi.WMI()
     info = {}
 
@@ -39,6 +55,9 @@ def pc():
 
     for system in c.Win32_BIOS():
         info['SN']=system.SerialNumber
+
+    if  len(c.Win32_Battery()) <1:
+        hasBattery = False
 
     return info
 
@@ -109,8 +128,8 @@ def BatteryHealth():
 
 
     return info
-
-print(BatteryHealth())
+if hasBattery:
+    print(BatteryHealth())
 
 
 
@@ -145,8 +164,10 @@ for d in diskDetails():
     print(f"Name: {d['FriendlyName']}\nMedia: {d['MediaType']}\nBus: {d['BusType']}\n{d['SizeGB']} GB")
 
 
-
-pcinfo = str(BatteryHealth()) + str(diskDetails()) + str(getRamDetails()) + str(ram()) + str(pc()) + str(cpu())
+if hasBattery:
+    pcinfo = str(BatteryHealth()) + str(diskDetails()) + str(getRamDetails()) + str(ram()) + str(pc()) + str(cpu()) +str(gpu())
+else:
+    pcinfo =str(diskDetails()) + str(getRamDetails()) + str(ram()) + str(pc()) + str(cpu()) + str(gpu())
 print(pcinfo)
 
 ###############################################################
@@ -167,8 +188,202 @@ def send_pcinfo(pcinfo):
     except Exception as e:
         return f"Error contacting backend: {e}"
 
-print(send_pcinfo(pcinfo))
+#print(send_pcinfo(pcinfo))
+
+
+#input("Press any key to continue...")
+
 
 #TODO
-#GPU
+# Listing Analyzer
+# Front end UI
+# Backend wait time (Render spin down)
 
+
+app = QApplication([])
+window = QWidget()
+
+layout = QGridLayout()
+
+btnPcInfo = QPushButton("Authenticity Check")
+
+output = QTextEdit()
+
+font = QFont("Segoe UI", 12)
+font.setBold(True)
+btnPcInfo.setFont(font)
+
+specSS = """
+QTextEdit {
+    background-color: #2b2b30;        
+    color: #ffffff;                    
+    border: 1px solid #3c3c3c;           
+    border-radius: 12px;               
+    padding: 10px;                         
+    font-family: 'Segoe UI';              
+    font-size: 12pt;                      
+}
+QTextEdit:focus {
+    border: 1px solid #4CAF50;           
+}
+"""
+
+cpu = cpu()
+cpustr ="CPU: "+cpu[4]+"\n\n"+ str(cpu[0]) + "\n\nCores: " + str(cpu[1]) +"\n\nThreads: " + str(cpu[2])+"\n\nClock speed: " +str(cpu[3]) + " Mhz"
+
+
+
+ramstr ="RAM: " + str(ram()) + " GB\nSlots Used: " + str(len(getRamDetails()))+"\n"
+slot = 1
+for i in getRamDetails():
+
+    ramstr += "\nSlot "+str(slot)+":\nManufacturer: "+str(i['manufacturer'])+"\nCapacity (GB): "+str(i['capacity (GB)'])+"\nSpeed (Mhz): "+str(i['speed (Mhz)'])+"\n"
+    slot += 1
+
+ramText = QTextEdit()
+ramText.setReadOnly(True)
+ramText.setStyleSheet(specSS)
+ramText.setText(ramstr)
+ramText.setFont(font)
+
+
+diskstr = ""
+disks = 1
+for i in diskDetails():
+    diskstr += "Disk "+str(disks)+":\n\nName: "+str(i['FriendlyName'])+"\n\nType: " + str(i['MediaType'])+" "+str(i['BusType'])+"\n\nCapacity: "+str(i['SizeGB'])+" GB\n"
+    disks += 1
+
+diskText = QTextEdit()
+diskText.setReadOnly(True)
+diskText.setStyleSheet(specSS)
+diskText.setText(diskstr)
+diskText.setFont(font)
+
+batstr = ""
+if hasBattery:
+
+
+    b = BatteryHealth()
+    dsgncapInt = ""
+    for i in str(b['DESIGN CAPACITY']):
+        if i.isdigit():
+            dsgncapInt += str(i)
+
+    fcCapInt = ""
+    for i in str(b['FULL CHARGE CAPACITY']):
+        if i.isdigit():
+           fcCapInt+= str(i)
+    print(fcCapInt)
+
+    dsgnCapInt = int(dsgncapInt)
+    fcCapInt = int(fcCapInt)
+    batstr += "Battery:\n\nManufacturer: "+b['MANUFACTURER']+"\n\nSerial No.: "+b['SERIAL NUMBER']+"\n\nDesign Capacity: "+b['DESIGN CAPACITY']+"\n\nFull Charge Capacity: "+b['FULL CHARGE CAPACITY']+"\n\nHealth: "+str(round((fcCapInt/dsgnCapInt)*100,2))+" %\n\nCycle Count: "+str(b['CYCLE COUNT'])
+
+    batteryText = QTextEdit()
+    batteryText.setReadOnly(True)
+    batteryText.setStyleSheet(specSS)
+    batteryText.setText(batstr)
+    batteryText.setFont(font)
+
+
+
+manText = QTextEdit()
+manText.setReadOnly(True)
+manText.setStyleSheet(specSS)
+manText.setText(str(pc()))
+
+manText.setFont(font)
+
+
+gpuText = QTextEdit()
+gpuText.setReadOnly(True)
+gpuText.setStyleSheet(specSS)
+gpuText.setText(str(gpu()))
+gpuText.setFont(font)
+
+
+def createShadowedLabel(text):
+    container = QFrame()
+    container.setStyleSheet("background: transparent;")
+
+    shadow = QGraphicsDropShadowEffect()
+    shadow.setBlurRadius(25)
+    shadow.setOffset(0, 5)
+    shadow.setColor(QColor(0, 0, 0, 160))
+    container.setGraphicsEffect(shadow)
+
+    label = QLabel()
+    label.setText(text)
+    label.setFont(font)
+    label.setStyleSheet("""
+        background-color: #2b2b30;
+        color: #ffffff;
+        border-radius: 12px;
+        padding: 10px;
+    """)
+
+    label.setWordWrap(True)
+
+    layout_container = QVBoxLayout(container)
+    layout_container.setContentsMargins(0, 0, 0, 0)
+    layout_container.addWidget(label)
+    container.setMinimumSize(150, 400)
+    container.setMaximumSize(600, 800)
+
+
+    return container, label
+
+
+cpuContainer, cpuLabel = createShadowedLabel(cpustr)
+layout.addWidget(cpuContainer, 0, 0)
+
+ramContainer, ramLabel = createShadowedLabel(ramstr)
+layout.addWidget(ramContainer, 0, 1)
+
+diskContainer, diskLabel = createShadowedLabel(diskstr)
+layout.addWidget(diskContainer, 0, 3)
+
+manContainer, manLabel = createShadowedLabel(str(pc()))
+layout.addWidget(manContainer, 0, 2)
+
+gpuContainer, gpuLabel = createShadowedLabel(str(gpu()))
+layout.addWidget(gpuContainer, 0, 4)
+
+if hasBattery:
+    batteryContainer, batteryLabel = createShadowedLabel(batstr)
+    layout.addWidget(batteryContainer, 0, 5)
+
+
+btnPcInfo.setStyleSheet("""
+    QPushButton {
+        background-color: #4CAF50;
+        color: white;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+    QPushButton:hover {
+        background-color: #45a049;
+    }
+""")
+
+output.setStyleSheet("border: 1px solid green; border-radius: 5px; padding: 5px;")
+
+layout.addWidget(btnPcInfo,1,0)
+layout.addWidget(output,1,1)
+
+window.setLayout(layout)
+window.show()
+
+
+
+
+
+def runtest():
+    output.setText(send_pcinfo(pcinfo))
+
+
+btnPcInfo.clicked.connect(runtest)
+
+
+app.exec()
