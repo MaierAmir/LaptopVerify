@@ -104,7 +104,7 @@ def BatteryHealth():
 
     f = open("battery.html","r",encoding="utf-8")
 
-    soup = BeautifulSoup(f, "lxml")
+    soup = BeautifulSoup(f, "html")
     tables = soup.find_all("table")
     #print(tables)
     battery_table = None
@@ -128,8 +128,8 @@ def BatteryHealth():
 
 
     return info
-if hasBattery:
-    print(BatteryHealth())
+# if hasBattery:
+#     print(BatteryHealth())
 
 
 
@@ -160,15 +160,15 @@ def diskDetails():
     return disks
 
 
-for d in diskDetails():
-    print(f"Name: {d['FriendlyName']}\nMedia: {d['MediaType']}\nBus: {d['BusType']}\n{d['SizeGB']} GB")
+# for d in diskDetails():
+#     print(f"Name: {d['FriendlyName']}\nMedia: {d['MediaType']}\nBus: {d['BusType']}\n{d['SizeGB']} GB")
 
 
 if hasBattery:
     pcinfo = str(BatteryHealth()) + str(diskDetails()) + str(getRamDetails()) + str(ram()) + str(pc()) + str(cpu()) +str(gpu())
 else:
     pcinfo =str(diskDetails()) + str(getRamDetails()) + str(ram()) + str(pc()) + str(cpu()) + str(gpu())
-print(pcinfo)
+# print(pcinfo)
 
 ###############################################################
 
@@ -179,17 +179,27 @@ print(pcinfo)
 
 
 
-def send_pcinfo(pcinfo):
-    url = "https://laptopverifybackend.onrender.com/authenticityCheck"
-    try:
-        response = requests.post(url, json={"pcinfo": pcinfo})
-        response.raise_for_status()
-        return response.json().get("result")
-    except Exception as e:
-        return f"Error contacting backend: {e}"
+from PySide6.QtCore import QThread, Signal
 
-#print(send_pcinfo(pcinfo))
+class BackendWorker(QThread):
+    finished = Signal(str)
 
+    def __init__(self, pcinfo):
+        super().__init__()
+        self.pcinfo = pcinfo
+
+    def run(self):
+        try:
+            response = requests.post(
+                "https://laptopverifybackend.onrender.com/authenticityCheck",
+                json={"pcinfo": self.pcinfo},
+                timeout=20
+            )
+            response.raise_for_status()
+            result = response.json().get("result")
+            self.finished.emit(str(result))
+        except Exception as e:
+            self.finished.emit(f"Error contacting backend: {e}")
 
 #input("Press any key to continue...")
 
@@ -273,7 +283,7 @@ if hasBattery:
     for i in str(b['FULL CHARGE CAPACITY']):
         if i.isdigit():
            fcCapInt+= str(i)
-    print(fcCapInt)
+    # print(fcCapInt)
 
     dsgnCapInt = int(dsgncapInt)
     fcCapInt = int(fcCapInt)
@@ -286,13 +296,14 @@ if hasBattery:
     batteryText.setFont(font)
 
 
+import json
 
+
+data = pc()
+
+formatted = "\n".join(f"{k}: {v}" for k, v in data.items())
 manText = QTextEdit()
-manText.setReadOnly(True)
-manText.setStyleSheet(specSS)
-manText.setText(str(pc()))
-
-manText.setFont(font)
+manText.setText(formatted)
 
 
 gpuText = QTextEdit()
@@ -332,27 +343,40 @@ def createShadowedLabel(text):
 
 
     return container, label
+def createInfoBox(text):
+    box = QTextEdit()
+    box.setReadOnly(True)
+    box.setStyleSheet(specSS)
+    box.setFont(font)
+    box.setText(text)
+    box.setMinimumWidth(280)
+    return box
 
 
-cpuContainer, cpuLabel = createShadowedLabel(cpustr)
-layout.addWidget(cpuContainer, 0, 0)
-
-ramContainer, ramLabel = createShadowedLabel(ramstr)
-layout.addWidget(ramContainer, 0, 1)
-
-diskContainer, diskLabel = createShadowedLabel(diskstr)
-layout.addWidget(diskContainer, 0, 3)
-
-manContainer, manLabel = createShadowedLabel(str(pc()))
-layout.addWidget(manContainer, 0, 2)
-
-gpuContainer, gpuLabel = createShadowedLabel(str(gpu()))
-layout.addWidget(gpuContainer, 0, 4)
+layout.addWidget(createInfoBox(cpustr), 0, 0)
+layout.addWidget(createInfoBox(ramstr), 0, 1)
+layout.addWidget(createInfoBox(diskstr), 0, 3)
 
 if hasBattery:
-    batteryContainer, batteryLabel = createShadowedLabel(batstr)
-    layout.addWidget(batteryContainer, 0, 5)
+    layout.addWidget(createInfoBox(batstr), 0, 5)
 
+
+pc_data = pc()
+pcstr = "\n\n".join(f"{k}: {v}" for k, v in pc_data.items())
+
+manBox = createInfoBox(pcstr)
+layout.addWidget(manBox, 0, 2)
+
+gpu_str = ""
+for idx, g in enumerate(gpu(), start=1):
+    gpu_str += f"GPU {idx}: {g['gpu']}\n"
+
+gpuBox = createInfoBox(gpu_str)
+layout.addWidget(gpuBox, 0, 4)
+
+
+for i in range(6):
+    layout.setColumnStretch(i, 1)
 
 btnPcInfo.setStyleSheet("""
     QPushButton {
@@ -378,9 +402,18 @@ window.show()
 
 
 
-
 def runtest():
-    output.setText(send_pcinfo(pcinfo))
+    output.setText("Checking authenticity...")
+    btnPcInfo.setEnabled(False)
+
+    window.worker = BackendWorker(pcinfo)
+    window.worker.finished.connect(on_result)
+    window.worker.start()
+
+
+def on_result(result):
+    output.setText(result)
+    btnPcInfo.setEnabled(True)
 
 
 btnPcInfo.clicked.connect(runtest)
